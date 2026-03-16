@@ -1,80 +1,108 @@
-import fs from 'fs';
-import path from 'path';
-import { Order } from './types';
+import { Redis } from '@upstash/redis';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
-
-function ensureDataDir(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+export interface Order {
+  id: string;
+  email: string;
+  package: 'basic' | 'pro';
+  amount: number;
+  status: 'pending' | 'processing' | 'completed' | 'refunded';
+  createdAt: string;
+  photoCount: number;
+  photos?: string[];
+  resultPhotos?: string[];
+  addons?: { linkedinBanner: boolean; rushDelivery: boolean };
+  stripePaymentId?: string;
+  notes?: string;
 }
 
-function readOrders(): Order[] {
-  ensureDataDir();
-  if (!fs.existsSync(ORDERS_FILE)) {
-    fs.writeFileSync(ORDERS_FILE, JSON.stringify([], null, 2));
-    return [];
-  }
+// Initialize Upstash Redis client
+const redis = new Redis({
+  url: process.env.STORAGE_URL!,
+  token: process.env.STORAGE_TOKEN!,
+});
+
+const ORDERS_KEY = 'orders:all';
+
+// Read all orders
+export async function getAllOrders(): Promise<Order[]> {
   try {
-    const content = fs.readFileSync(ORDERS_FILE, 'utf-8');
-    return JSON.parse(content) as Order[];
-  } catch {
+    const orders = await redis.get<Order[]>(ORDERS_KEY);
+    return orders || [];
+  } catch (error) {
+    console.error('Error getting orders:', error);
     return [];
   }
 }
 
-function writeOrders(orders: Order[]): void {
-  ensureDataDir();
-  fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+// Get single order by ID
+export async function getOrderById(orderId: string): Promise<Order | null> {
+  try {
+    const orders = await getAllOrders();
+    return orders.find(o => o.id === orderId) || null;
+  } catch (error) {
+    console.error('Error getting order:', error);
+    return null;
+  }
 }
 
-export function getAllOrders(): Order[] {
-  return readOrders();
+// Alias for getOrderById
+export const getOrder = getOrderById;
+
+// Create new order
+export async function createOrder(data: Partial<Order>): Promise<Order> {
+  try {
+    const orders = await getAllOrders();
+    const order: Order = {
+      id: data.id ?? generateOrderId(),
+      email: data.email ?? '',
+      package: data.package ?? 'basic',
+      amount: data.amount ?? 0,
+      status: data.status ?? 'pending',
+      createdAt: data.createdAt ?? new Date().toISOString(),
+      photoCount: data.photoCount ?? 0,
+      photos: data.photos ?? [],
+      resultPhotos: data.resultPhotos ?? [],
+      addons: data.addons ?? { linkedinBanner: false, rushDelivery: false },
+      stripePaymentId: data.stripePaymentId,
+      notes: data.notes,
+    };
+    orders.push(order);
+    await redis.set(ORDERS_KEY, orders);
+    return order;
+  } catch (error) {
+    console.error('Error creating order:', error);
+    throw error;
+  }
 }
 
-export function getOrderById(id: string): Order | null {
-  const orders = readOrders();
-  return orders.find((o) => o.id === id) ?? null;
+// Update order
+export async function updateOrder(orderId: string, updates: Partial<Order>): Promise<Order | null> {
+  try {
+    const orders = await getAllOrders();
+    const index = orders.findIndex(o => o.id === orderId);
+    if (index === -1) return null;
+
+    orders[index] = { ...orders[index], ...updates };
+    await redis.set(ORDERS_KEY, orders);
+    return orders[index];
+  } catch (error) {
+    console.error('Error updating order:', error);
+    return null;
+  }
 }
 
-export function createOrder(data: Partial<Order>): Order {
-  const orders = readOrders();
-  const order: Order = {
-    id: data.id ?? generateOrderId(),
-    email: data.email ?? '',
-    package: data.package ?? 'basic',
-    addons: data.addons ?? { linkedinBanner: false, rushDelivery: false },
-    total: data.total ?? 0,
-    status: data.status ?? 'pending',
-    createdAt: data.createdAt ?? new Date().toISOString(),
-    photoCount: data.photoCount ?? 0,
-    photos: data.photos ?? [],
-    resultPhotos: data.resultPhotos ?? [],
-    stripePaymentId: data.stripePaymentId,
-    notes: data.notes,
-  };
-  orders.push(order);
-  writeOrders(orders);
-  return order;
-}
-
-export function updateOrder(id: string, updates: Partial<Order>): Order | null {
-  const orders = readOrders();
-  const index = orders.findIndex((o) => o.id === id);
-  if (index === -1) return null;
-  orders[index] = { ...orders[index], ...updates };
-  writeOrders(orders);
-  return orders[index];
-}
-
-export function deleteOrder(id: string): boolean {
-  const orders = readOrders();
-  const filtered = orders.filter((o) => o.id !== id);
-  if (filtered.length === orders.length) return false;
-  writeOrders(filtered);
-  return true;
+// Delete order
+export async function deleteOrder(orderId: string): Promise<boolean> {
+  try {
+    const orders = await getAllOrders();
+    const filtered = orders.filter(o => o.id !== orderId);
+    if (filtered.length === orders.length) return false;
+    await redis.set(ORDERS_KEY, filtered);
+    return true;
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    return false;
+  }
 }
 
 export function generateOrderId(): string {
@@ -83,26 +111,24 @@ export function generateOrderId(): string {
   return `LS-${timestamp}-${random}`;
 }
 
-export function getTodayStats(): {
+export async function getTodayStats(): Promise<{
   ordersToday: number;
   revenueToday: number;
   pending: number;
   completed: number;
-} {
-  const orders = readOrders();
+}> {
+  const orders = await getAllOrders();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const todayOrders = orders.filter(
-    (o) => new Date(o.createdAt) >= todayStart
-  );
+  const todayOrders = orders.filter(o => new Date(o.createdAt) >= todayStart);
 
   return {
     ordersToday: todayOrders.length,
     revenueToday: todayOrders
-      .filter((o) => o.status !== 'refunded')
-      .reduce((sum, o) => sum + o.total, 0),
-    pending: orders.filter((o) => o.status === 'pending').length,
-    completed: orders.filter((o) => o.status === 'completed').length,
+      .filter(o => o.status !== 'refunded')
+      .reduce((sum, o) => sum + o.amount, 0),
+    pending: orders.filter(o => o.status === 'pending').length,
+    completed: orders.filter(o => o.status === 'completed').length,
   };
 }
