@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /processing
+
+Sitemap: https://linkedshot.com.my/sitemap.xml
