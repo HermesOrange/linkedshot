@@ -1,38 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllOrders, createOrder, generateOrderId, getTodayStats } from '@/lib/orders-db';
-import { Order } from '@/lib/types';
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin123';
-
-export async function GET(request: NextRequest) {
-  try {
-    const adminPassword = request.headers.get('x-admin-password');
-
-    if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Provide x-admin-password header.' },
-        { status: 401 }
-      );
-    }
-
-    const orders = getAllOrders();
-
-    // Sort by createdAt descending
-    orders.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    const stats = getTodayStats();
-
-    return NextResponse.json({ orders, stats });
-  } catch (error) {
-    console.error('GET orders error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch orders' },
-      { status: 500 }
-    );
-  }
-}
+import { createOrder, generateOrderId } from '@/lib/orders-db';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,11 +8,9 @@ export async function POST(request: NextRequest) {
     const {
       email,
       package: pkg,
+      photos,
       addons,
       total,
-      photoCount,
-      photos,
-      stripePaymentId,
       paymentId,
     } = body;
 
@@ -84,10 +49,10 @@ export async function POST(request: NextRequest) {
       total,
       status: 'pending',
       createdAt: new Date().toISOString(),
-      photoCount: photoCount ?? photoPaths.length,
+      photoCount: photoPaths.length,
       photos: photoPaths,
       resultPhotos: [],
-      stripePaymentId: stripePaymentId ?? paymentId,
+      stripePaymentId: paymentId,
     });
 
     return NextResponse.json(
@@ -95,7 +60,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('POST order error:', error);
+    console.error('POST /api/orders/create error:', error);
     return NextResponse.json(
       { error: 'Failed to create order' },
       { status: 500 }

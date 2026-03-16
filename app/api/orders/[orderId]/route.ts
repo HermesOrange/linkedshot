@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrderById, updateOrder } from '@/lib/storage';
+import { getOrderById, updateOrder } from '@/lib/orders-db';
 import { OrderStatus } from '@/lib/types';
 
 const VALID_STATUSES: OrderStatus[] = ['pending', 'processing', 'completed', 'refunded'];

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, CheckCircle } from 'lucide-react';
 
@@ -27,12 +27,25 @@ const funFacts = [
 
 export default function ProcessingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [progress, setProgress] = useState(0);
   const [currentStageLabel, setCurrentStageLabel] = useState(stages[0].label);
   const [factIndex, setFactIndex] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get orderId from URL searchParams first, fall back to sessionStorage
+  const orderId =
+    searchParams.get('orderId') ??
+    (typeof window !== 'undefined'
+      ? sessionStorage.getItem('linkedshot_orderId') ?? 'demo-order'
+      : 'demo-order');
+
+  const email =
+    typeof window !== 'undefined'
+      ? sessionStorage.getItem('linkedshot_email') ?? 'your@email.com'
+      : 'your@email.com';
 
   useEffect(() => {
     // Rotate fun facts
@@ -76,7 +89,6 @@ export default function ProcessingPage() {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(cdInterval);
-          const orderId = sessionStorage.getItem('linkedshot_orderId') ?? 'demo-order';
           router.push(`/download/${orderId}`);
           return 0;
         }
@@ -85,11 +97,7 @@ export default function ProcessingPage() {
     }, 1000);
 
     return () => clearInterval(cdInterval);
-  }, [isComplete, router]);
-
-  const email = typeof window !== 'undefined'
-    ? sessionStorage.getItem('linkedshot_email') ?? 'your@email.com'
-    : 'your@email.com';
+  }, [isComplete, router, orderId]);
 
   const progressRounded = Math.round(progress);
   const circumference = 2 * Math.PI * 54;
@@ -99,10 +107,15 @@ export default function ProcessingPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#F3F6F8] via-white to-[#EBF3FC] flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <a href="/" className="font-bold text-xl text-gray-900">
             Linked<span className="text-[#0A66C2]">Shot</span>
           </a>
+          {orderId && orderId !== 'demo-order' && (
+            <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">
+              Order #{orderId}
+            </span>
+          )}
         </div>
       </div>
 
@@ -194,10 +207,7 @@ export default function ProcessingPage() {
                 <span className="font-bold text-[#0A66C2]">{countdown}s</span>...
               </p>
               <button
-                onClick={() => {
-                  const orderId = sessionStorage.getItem('linkedshot_orderId') ?? 'demo-order';
-                  router.push(`/download/${orderId}`);
-                }}
+                onClick={() => router.push(`/download/${orderId}`)}
                 className="inline-flex items-center gap-2 bg-[#057642] text-white font-bold px-8 py-4 rounded-xl hover:bg-[#046034] transition-all duration-200 shadow-lg active:scale-95 text-lg"
               >
                 View My Headshots →

@@ -36,6 +36,12 @@ next-env.d.ts
 
 # data (not tracked in git - will be created on first run)
 /data/orders.json
+!/data/.gitkeep
 
 # uploads
-/public/uploads/
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# results
+/public/results/*
+!/public/results/.gitkeep

@@ -56,9 +56,24 @@ function formatExpiry(value: string) {
     .replace(/^(\d{2})(\d)/, '$1/$2');
 }
 
+function base64ToBlob(base64: string): { blob: Blob; ext: string } {
+  const [header, data] = base64.split(',');
+  const mimeMatch = header.match(/data:([^;]+);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const ext = mime.split('/')[1] ?? 'jpg';
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return { blob: new Blob([bytes], { type: mime }), ext };
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [submitStep, setSubmitStep] = useState('');
   const [orderSummary, setOrderSummary] = useState({
     package: 'basic' as 'basic' | 'pro',
     addons: { linkedinBanner: false, rushDelivery: false },
@@ -69,7 +84,6 @@ export default function CheckoutPage() {
     register,
     handleSubmit,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<CheckoutForm>();
 
@@ -93,40 +107,81 @@ export default function CheckoutPage() {
 
   const onSubmit = async (data: CheckoutForm) => {
     setIsSubmitting(true);
+    setSubmitError('');
 
     try {
       // Save email to session
       sessionStorage.setItem('linkedshot_email', data.email);
 
       const photosRaw = sessionStorage.getItem('linkedshot_photos');
-      const photos = photosRaw ? JSON.parse(photosRaw) : [];
+      const photos: string[] = photosRaw ? JSON.parse(photosRaw) : [];
       const selection = JSON.parse(
         sessionStorage.getItem('linkedshot_selection') ?? '{}'
       );
 
-      // Create order via API
-      const res = await fetch('/api/orders', {
+      // Step 1: Upload photos to server
+      let uploadedPaths: string[] = [];
+
+      if (photos.length > 0) {
+        setSubmitStep('Uploading your photos...');
+        const formData = new FormData();
+        photos.forEach((base64, idx) => {
+          try {
+            const { blob, ext } = base64ToBlob(base64);
+            formData.append('photos', blob, `photo-${idx + 1}.${ext}`);
+          } catch {
+            // skip malformed entries
+          }
+        });
+
+        const uploadRes = await fetch('/api/upload-photos', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          uploadedPaths = uploadData.paths ?? [];
+        }
+        // If upload fails, proceed with empty paths — order still gets created
+      }
+
+      // Step 2: Create the order
+      setSubmitStep('Creating your order...');
+      const paymentId = `mock_${Date.now()}`;
+
+      const orderRes = await fetch('/api/orders/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: data.email,
-          package: selection.package || 'basic',
-          addons: selection.addons || { linkedinBanner: false, rushDelivery: false },
-          total: selection.total || 79,
-          photoCount: photos.length,
-          photos: photos.slice(0, 3), // Save first 3 as preview
+          package: selection.package ?? 'basic',
+          addons: selection.addons ?? { linkedinBanner: false, rushDelivery: false },
+          total: selection.total ?? 79,
+          photos: uploadedPaths,
+          paymentId,
         }),
       });
 
-      if (res.ok) {
-        const order = await res.json();
-        sessionStorage.setItem('linkedshot_orderId', order.id);
+      if (!orderRes.ok) {
+        const errData = await orderRes.json().catch(() => ({}));
+        throw new Error(errData.error ?? 'Failed to create order');
       }
 
-      router.push('/processing');
-    } catch {
-      // Proceed anyway for demo
-      router.push('/processing');
+      const orderData = await orderRes.json();
+      const orderId: string = orderData.orderId ?? orderData.order?.id;
+
+      if (!orderId) {
+        throw new Error('No order ID returned from server');
+      }
+
+      sessionStorage.setItem('linkedshot_orderId', orderId);
+      router.push(`/processing?orderId=${orderId}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setSubmitError(message);
+      setIsSubmitting(false);
+      setSubmitStep('');
     }
   };
 
@@ -158,6 +213,12 @@ export default function CheckoutPage() {
           </h1>
           <p className="text-gray-600">Complete your order and get your headshots in minutes.</p>
         </motion.div>
+
+        {submitError && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm font-medium">
+            {submitError}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="grid lg:grid-cols-3 gap-8">
@@ -348,7 +409,8 @@ export default function CheckoutPage() {
                 <button
                   type="button"
                   onClick={() => router.back()}
-                  className="flex items-center gap-2 text-gray-600 font-semibold px-5 py-3 rounded-xl border-2 border-gray-200 hover:bg-gray-50 transition-colors"
+                  disabled={isSubmitting}
+                  className="flex items-center gap-2 text-gray-600 font-semibold px-5 py-3 rounded-xl border-2 border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   <ChevronLeft className="w-4 h-4" />
                   Back
@@ -364,7 +426,7 @@ export default function CheckoutPage() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      Processing...
+                      {submitStep || 'Processing...'}
                     </>
                   ) : (
                     <>

@@ -3,7 +3,6 @@
 import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, ImagePlus, AlertCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 interface DropzoneProps {
   onDrop: (files: File[]) => void;
@@ -26,14 +25,12 @@ export default function Dropzone({ onDrop, currentCount, maxFiles = 10 }: Dropzo
     onDrop: handleDrop,
     accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.heic'] },
     maxFiles: remaining,
-    maxSize: 20 * 1024 * 1024, // 20MB
+    maxSize: 20 * 1024 * 1024,
     disabled: remaining <= 0,
   });
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       {...getRootProps()}
       className={`
         relative rounded-2xl border-2 border-dashed p-10 text-center cursor-pointer transition-all duration-200
@@ -44,7 +41,7 @@ export default function Dropzone({ onDrop, currentCount, maxFiles = 10 }: Dropzo
       `}
     >
       <input {...getInputProps()} />
-
+      
       {isDragReject ? (
         <div className="flex flex-col items-center gap-3">
           <AlertCircle className="w-12 h-12 text-red-400" />
@@ -52,12 +49,9 @@ export default function Dropzone({ onDrop, currentCount, maxFiles = 10 }: Dropzo
         </div>
       ) : isDragActive ? (
         <div className="flex flex-col items-center gap-3">
-          <motion.div
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ repeat: Infinity, duration: 0.8 }}
-          >
+          <div className="animate-pulse">
             <ImagePlus className="w-12 h-12 text-[#0A66C2]" />
-          </motion.div>
+          </div>
           <p className="text-[#0A66C2] font-semibold text-lg">Drop your photos here!</p>
         </div>
       ) : remaining <= 0 ? (
@@ -77,8 +71,7 @@ export default function Dropzone({ onDrop, currentCount, maxFiles = 10 }: Dropzo
               Drop your photos here
             </p>
             <p className="text-gray-500 text-sm">
-              or{' '}
-              <span className="text-[#0A66C2] font-semibold underline">click to browse</span>
+              or <span className="text-[#0A66C2] font-semibold underline">click to browse</span>
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
@@ -89,11 +82,10 @@ export default function Dropzone({ onDrop, currentCount, maxFiles = 10 }: Dropzo
             <span className="bg-gray-50 text-gray-400 px-2 py-0.5">Max 20MB each</span>
           </div>
           <p className="text-sm text-gray-500">
-            Upload up to{' '}
-            <strong className="text-gray-700">{remaining} more photo{remaining !== 1 ? 's' : ''}</strong>
+            Upload up to <strong className="text-gray-700">{remaining} more photo{remaining !== 1 ? 's' : ''}</strong>
           </p>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
