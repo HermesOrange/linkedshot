@@ -7,7 +7,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'admin123';
 export async function GET(request: NextRequest) {
   try {
     const adminPassword = request.headers.get('x-admin-password');
-
     if (!adminPassword || adminPassword !== ADMIN_PASSWORD) {
       return NextResponse.json(
         { error: 'Unauthorized. Provide x-admin-password header.' },
@@ -15,14 +14,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const orders = getAllOrders();
-
+    const orders = await getAllOrders();  // ✅ ADDED await
     // Sort by createdAt descending
     orders.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-    const stats = getTodayStats();
+    const stats = await getTodayStats();  // ✅ ADDED await
 
     return NextResponse.json({ orders, stats });
   } catch (error) {
@@ -37,7 +35,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
     const {
       email,
       package: pkg,
@@ -73,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     const photoPaths: string[] = Array.isArray(photos) ? photos : [];
 
-    const order = createOrder({
+    const order = await createOrder({  // ✅ ADDED await
       id: generateOrderId(),
       email,
       package: pkg as 'basic' | 'pro',
