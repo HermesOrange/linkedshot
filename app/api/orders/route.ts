@@ -14,13 +14,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const orders = await getAllOrders();  // ✅ ADDED await
-    // Sort by createdAt descending
+    const orders = await getAllOrders();
     orders.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-    const stats = await getTodayStats();  // ✅ ADDED await
+    const stats = await getTodayStats();
 
     return NextResponse.json({ orders, stats });
   } catch (error) {
@@ -46,7 +45,6 @@ export async function POST(request: NextRequest) {
       paymentId,
     } = body;
 
-    // Validation
     if (!email || !pkg || total === undefined) {
       return NextResponse.json(
         { error: 'Missing required fields: email, package, total' },
@@ -70,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     const photoPaths: string[] = Array.isArray(photos) ? photos : [];
 
-    const order = await createOrder({  // ✅ ADDED await
+    const order = await createOrder({
       id: generateOrderId(),
       email,
       package: pkg as 'basic' | 'pro',
